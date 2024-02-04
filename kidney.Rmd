@@ -28,7 +28,7 @@ set.seed(123)
 setwd("~/sucheng/scRNA/00New/")
 dir.create("~/sucheng/scRNA/00New/kidney")
 ```
-## 读取数据
+## load data
 ```{r}
 assays <- dir("~/sucheng/scRNA/00New/data/kidney/")
 dir <- paste0("~/sucheng/scRNA/00New/data/kidney/", assays)
@@ -51,13 +51,12 @@ for(i in 1:length(dir)){
 dir.create("~/sucheng/scRNA/00New/kidney/Integrate")
 setwd("~/sucheng/scRNA/00New/kidney/Integrate")
 names(scRNAlist) <- samples_name
-### 查看单个样本信息
 lapply(scRNAlist, dim)
 
 system.time(saveRDS(scRNAlist, file = "scRNAlist0.rds"))
 
 ```
-## 数据质控
+## Data quality control
 ```{r}
 scRNA <- merge(scRNAlist[[1]], scRNAlist[2:length(scRNAlist)])
 dim(scRNA)
@@ -74,7 +73,7 @@ theme.set2 = theme(axis.title.x=element_blank())
 plot.featrures = c("nFeature_RNA", "nCount_RNA", "percent.mt", "percent.rb", "percent.HB")
 group = "orig.ident"
 
-### 质控前小提琴图
+### Before QC
 plots = list()
 for(i in seq_along(plot.featrures)){
   plots[[i]] = VlnPlot(scRNA, group.by=group, pt.size = 0,
@@ -82,17 +81,15 @@ for(i in seq_along(plot.featrures)){
 wrap_plots(plots = plots, nrow=2) 
 ```
 ```{r}
-### 设置质控标准
+
 minGene=200
 maxGene=2500
 pctMT=30
 
-
-### 数据质控并绘制小提琴图
 scRNA <- subset(scRNA, subset = nFeature_RNA > minGene & nFeature_RNA < maxGene & percent.mt < pctMT)
 dim(scRNA)
 
-### 质控后小提琴图
+### After QC
 plots = list()
 for(i in seq_along(plot.featrures)){
   plots[[i]] = VlnPlot(scRNA, group.by=group, pt.size = 0,
@@ -100,18 +97,18 @@ for(i in seq_along(plot.featrures)){
 wrap_plots(plots = plots, nrow=2) 
 ```
 
-## 查看批次效应和细胞周期
+## View batch effects and cell cycles
 ```{r,cache=TRUE}
 scRNA <- SCTransform(scRNA)
 
-### 计算细胞周期
+### cell cycles
 g2m_genes <- cc.genes$g2m.genes
 g2m_genes <- CaseMatch(search=g2m_genes, match=rownames(scRNA))
 s_genes <- cc.genes$s.genes    
 s_genes <- CaseMatch(search=s_genes, match=rownames(scRNA))
 scRNA <- CellCycleScoring(scRNA, g2m.features=g2m_genes, s.features=s_genes)
 
-### 降维聚类
+### Dimensionality reduction clustering
 scRNA <- RunPCA(scRNA, verbose = F)
 ElbowPlot(scRNA, ndims = 50)
 pc.num=1:20
@@ -119,42 +116,37 @@ scRNA <- scRNA %>% RunTSNE(dims=pc.num) %>% RunUMAP(dims=pc.num)
 scRNA <- FindNeighbors(scRNA, dims=pc.num) %>% FindClusters(resolution = 0.25)
 table(scRNA@meta.data$seurat_clusters)
 
-###查看细胞周期影响
+### View Cell Cycle Impact
 p <- DimPlot(scRNA, group.by = "Phase")
 p
 ```
 
 ```{r,autodep=TRUE}
-###查看批次效应
+### Viewing batch Effects
 p <- DimPlot(scRNA, group.by = "orig.ident")
 ggsave("UMAP_Samples.pdf", p, width = 8, height = 6)
 p
 ```
 
 ```{r,autodep=TRUE}
-###分样本画
+
 p <- DimPlot(scRNA, group.by = "orig.ident", split.by = "orig.ident", ncol = 4)
 ggsave("UMAP_Samples_Split.pdf", p, width = 18, height = 12)
 p
 ```
 
 ```{r,cache=TRUE,,autodep=TRUE}
-## harmony整合
+## harmony
 cellinfo <- subset(scRNA@meta.data, select = c("orig.ident", "percent.mt",
                                                "percent.rb", "percent.HB","Phase",
                                                "S.Score","G2M.Score"))
 scRNA <- CreateSeuratObject(scRNA@assays$RNA@counts, meta.data = cellinfo)
 
-### SCT标准化数据
+### SCT
 scRNA <- SCTransform(scRNA)
-### 去细胞周期影响
-### scRNA <- SCTransform(scRNA,vars.to.regress = c("S.Score","G2M.Score"))
-
-### harmony整合数据
 scRNA <- RunPCA(scRNA, npcs=50, verbose=FALSE)
 scRNA <- RunHarmony(scRNA, group.by.vars="orig.ident", assay.use="SCT", max.iter.harmony = 20)
 
-### 降维聚类
 ElbowPlot(scRNA, ndims = 50)
 pc.num=1:20
 scRNA <- RunUMAP(scRNA, reduction="harmony", dims=pc.num)
@@ -177,7 +169,6 @@ ggsave("UMAP_Samples_Split_harmony.pdf", p, width = 18, height = 12)
 p
 ```
 
-## 基于cluster画图
 ```{r include=FALSE}
 modify_vlnplot<- function(obj, 
                           feature, 
@@ -224,7 +215,7 @@ p1
 
 ```{r, fig.height = 20,fig.width = 25,,autodep=TRUE}
 setwd("~/sucheng/scRNA/00New/kidney/LGC_GENE")
-###Featureplot展示
+###Featureplot
 p2 <- FeaturePlot(scRNA, features = LGC_genes, reduction = "umap",label=T, ncol=5)
 ggsave("LGC_cluster_FeaturePlot.pdf", p2, width=25 ,height=20)
 p2
@@ -232,13 +223,13 @@ p2
 
 ```{r,fig.height = 10,fig.width = 16,,autodep=TRUE}
 setwd("~/sucheng/scRNA/00New/kidney/LGC_GENE")
-###DotPlot展示
+###DotPlot
 p3= DotPlot(scRNA, features = LGC_genes,group.by="seurat_clusters")+
   theme(axis.text.x = element_text(angle=80,vjust = 0.5))
 ggsave('LGC_cluster_dotplot.pdf', p3, width = 16, height = 10)
 p3
 ```
-## marker基因
+## marker
 ```{r,fig.height = 15,fig.width = 20,,autodep=TRUE}
 sel_gene <- c("SLC13A3","SLC34A1","GPX3","DCXR","SLC22A8",
               "SLC22A7","KRT8","KRT18","CD24","VCAM1",
@@ -246,7 +237,7 @@ sel_gene <- c("SLC13A3","SLC34A1","GPX3","DCXR","SLC22A8",
               "CD3E","IL7R","CD79A","CD79B","UMOD",
               "DEFB1","CLDN8","AQP2","ATP6V1G3","ATP6V0D2",
               "TMEM213")
-###Vlnplot展示
+###Vlnplot
 p <- VlnPlot(scRNA, features = sel_gene,pt.size=0,
               group.by="seurat_clusters", ncol=5)
 ggsave("marker_genes_VlnPlot.pdf", p, width=20 ,height=15)
